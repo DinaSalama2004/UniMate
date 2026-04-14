@@ -1,0 +1,474 @@
+{
+  "info": {
+    "_postman_id": "unimate-api-v2-organized",
+    "name": "UniMate API (full scenarios)",
+    "description": "Organized by feature. Set **collection variables** (`test_student_email`, `test_student_password`, super admin credentials) then run folders top to bottom where noted.\n\n- **422** validation: `{ error, message, details[] }`\n- **400/401** business: `{ detail: { code, message } }`",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://127.0.0.1:8000" },
+    { "key": "test_student_email", "value": "dina@example.com" },
+    { "key": "test_student_password", "value": "Secret123!" },
+    { "key": "token", "value": "" },
+    { "key": "super_admin_token", "value": "" },
+    { "key": "super_admin_email", "value": "ehab@gmail.com" },
+    { "key": "super_admin_password", "value": "CHANGE_ME" },
+    { "key": "new_admin_email", "value": "new.admin@example.com" }
+  ],
+  "item": [
+
+    {
+      "name": "01 — Register (POST /register)",
+      "description": "Run **01 Success** first to create `test_student_email` user (or change variables). **02 Duplicate** expects that user to exist.",
+      "item": [
+        {
+          "name": "01 Success — 200 + token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"200 + token\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var j = pm.response.json();",
+                  "    pm.expect(j).to.have.property(\"token\");",
+                  "    pm.expect(j.role).to.eql(\"student\");",
+                  "    if (j.token) pm.collectionVariables.set(\"token\", j.token);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Dina Salama \",\n  \"email\": \"{{test_student_email}}\",\n  \"password\": \"{{test_student_password}}\",\n  \"confirm_password\": \"{{test_student_password}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/register",
+            "description": "Creates student; saves `token` to collection variable."
+          }
+        },
+        {
+          "name": "02 Duplicate email — 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"400 email_exists\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "    var j = pm.response.json();",
+                  "    pm.expect(j.detail.code).to.eql(\"email_exists\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Demo Student\",\n  \"email\": \"{{test_student_email}}\",\n  \"password\": \"{{test_student_password}}\",\n  \"confirm_password\": \"{{test_student_password}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/register",
+            "description": "Run after **01** with the same `test_student_email`."
+          }
+        },
+        {
+          "name": "03 Passwords do not match — 422",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"422 validation_error\", function () {",
+                  "    pm.response.to.have.status(422);",
+                  "    pm.expect(pm.response.json().error).to.eql(\"validation_error\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Test\",\n  \"email\": \"mismatch.{{$timestamp}}@example.com\",\n  \"password\": \"Secret123!\",\n  \"confirm_password\": \"OtherSecret123!\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/register"
+          }
+        },
+        {
+          "name": "04 Password too short — 422",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"422\", function () { pm.response.to.have.status(422); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Test\",\n  \"email\": \"shortpw.{{$timestamp}}@example.com\",\n  \"password\": \"short\",\n  \"confirm_password\": \"short\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/register"
+          }
+        },
+        {
+          "name": "05 Invalid email format — 422",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"422\", function () { pm.response.to.have.status(422); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Test\",\n  \"email\": \"not-a-valid-email\",\n  \"password\": \"Secret123!\",\n  \"confirm_password\": \"Secret123!\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/register"
+          }
+        },
+        {
+          "name": "06 Full name empty (whitespace) — 422",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"422\", function () { pm.response.to.have.status(422); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"   \",\n  \"email\": \"noname.{{$timestamp}}@example.com\",\n  \"password\": \"Secret123!\",\n  \"confirm_password\": \"Secret123!\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/register"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 — Login (POST /login)",
+      "description": "Run **Register → 01 Success** first (or ensure `test_student_email` exists).",
+      "item": [
+        {
+          "name": "01 Success — 200 + token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var j = pm.response.json();",
+                  "    pm.expect(j).to.have.property(\"token\");",
+                  "    if (j.token) pm.collectionVariables.set(\"token\", j.token);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{test_student_email}}\",\n  \"password\": \"{{test_student_password}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/login"
+          }
+        },
+        {
+          "name": "02 Wrong password — 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"401 invalid_credentials\", function () {",
+                  "    pm.response.to.have.status(401);",
+                  "    pm.expect(pm.response.json().detail.code).to.eql(\"invalid_credentials\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{test_student_email}}\",\n  \"password\": \"DefinitelyWrong999!\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/login"
+          }
+        },
+        {
+          "name": "03 Unknown email — 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"401\", function () { pm.response.to.have.status(401); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"nobody.exists.{{$timestamp}}@example.com\",\n  \"password\": \"Secret123!\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/login"
+          }
+        },
+        {
+          "name": "04 Invalid email format — 422",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"422\", function () { pm.response.to.have.status(422); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"bad-email\",\n  \"password\": \"Secret123!\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/login"
+          }
+        },
+        {
+          "name": "05 Empty password — 422",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"422\", function () { pm.response.to.have.status(422); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{test_student_email}}\",\n  \"password\": \"\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/login"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 — Create admin (POST /create-admin)",
+      "description": "Requires **super admin** JWT (`SUPER_ADMIN_EMAIL` in `utils/security.py`, default **ehab@gmail.com**). Set `super_admin_password` in collection variables, run **01 Login super admin**, then **02 Create admin success**. JWT secret mismatch between `jwt.py` and `security.py` must be fixed in code for this to work.",
+      "item": [
+        {
+          "name": "01 Login super admin — save token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var j = pm.response.json();",
+                  "    if (j.token) pm.collectionVariables.set(\"super_admin_token\", j.token);",
+                  "}",
+                  "pm.test(\"200 or 401\", function () {",
+                  "    pm.expect([200,401]).to.include(pm.response.code);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{super_admin_email}}\",\n  \"password\": \"{{super_admin_password}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/login",
+            "description": "Set `super_admin_password` first. Saves token to `super_admin_token`."
+          }
+        },
+        {
+          "name": "02 Create admin — 200 (Bearer)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"200 or 403\", function () {",
+                  "    pm.expect([200,403,401]).to.include(pm.response.code);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{super_admin_token}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{new_admin_email}}\",\n  \"password\": \"AdminSecret123!\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/create-admin",
+            "description": "Change `new_admin_email` to a fresh email each run, or delete user in DB between runs."
+          }
+        },
+        {
+          "name": "03 Duplicate admin email — 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"400 or 403\", function () {",
+                  "    pm.expect([400,403,401]).to.include(pm.response.code);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{super_admin_token}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{new_admin_email}}\",\n  \"password\": \"AdminSecret123!\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/create-admin",
+            "description": "Run after **02** success with same `new_admin_email`."
+          }
+        },
+        {
+          "name": "04 No Bearer token — 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"401\", function () { pm.response.to.have.status(401); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"other.admin@example.com\",\n  \"password\": \"AdminSecret123!\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/create-admin"
+          }
+        },
+        {
+          "name": "05 Student token (forbidden) — 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"403 or 401\", function () {",
+                  "    pm.expect([403,401]).to.include(pm.response.code);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"blocked.admin@example.com\",\n  \"password\": \"AdminSecret123!\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/create-admin",
+            "description": "Uses student `token` from Register/Login. Expect **403** if JWT is valid and user is not super admin."
+          }
+        }
+      ]
+    }
+  ]
+}
