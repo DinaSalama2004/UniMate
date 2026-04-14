@@ -695,6 +695,67 @@
               }
             }
           ]
+        },
+        {
+          "name": "04 - Forgot Password",
+          "item": [
+            {
+              "name": "01 Forgot Password - 200",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"email\": \"{{test_student_email}}\"}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": "{{baseUrl}}/forgot-password"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
+                      "var j = pm.response.json();",
+                      "if (j.reset_token) pm.collectionVariables.set(\"reset_token\", j.reset_token);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "02 Reset Password - 200",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"email\": \"{{test_student_email}}\", \"reset_token\": \"{{reset_token}}\", \"new_password\": \"NewSecret123!\"}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": "{{baseUrl}}/reset-password"
+              }
+            }
+          ]
         }
       ]
     }

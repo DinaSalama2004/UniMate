@@ -1,5 +1,8 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { fetchAPI, extractErrorMessage } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
+import { toast } from "sonner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +12,7 @@ import { motion } from "framer-motion";
 
 export default function Login() {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -26,24 +30,27 @@ export default function Login() {
 
     setIsLoading(true);
     
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      const data = await fetchAPI("/login", {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+      });
       
-      // Check email and redirect accordingly
-      if (email.toLowerCase() === "shahd@gmail.com") {
-        // Student dashboard
-        navigate("/dashboard");
-      } else if (email.toLowerCase() === "admin@gmail.com") {
-        // Admin dashboard
-        navigate("/admin/");
+      login(data.token, data.role);
+      toast.success("Welcome back!");
+      
+      if (data.role === "admin" || data.role === "super_admin") {
+        navigate("/admin");
       } else {
-        // For demo purposes, treat all other emails as student
-        // In a real app, you would check against a database
-        setError("Invalid credentials. Try shahd@gmail.com or admin@gmail.com");
-        // navigate("/dashboard"); // Uncomment to allow any email
+        navigate("/dashboard");
       }
-    }, 1000);
+    } catch (err) {
+      const msg = extractErrorMessage(err);
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -84,9 +91,6 @@ export default function Login() {
                 className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-md"
               >
                 <p className="text-sm text-destructive text-center">{error}</p>
-                <p className="text-xs text-muted-foreground text-center mt-1">
-                  Demo: Use user@gmail.com (student) or admin@gmail.com (admin)
-                </p>
               </motion.div>
             )}
             
@@ -111,7 +115,12 @@ export default function Login() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="password">Password</Label>
+                  <Link to="/forgot-password" className="text-sm font-medium text-primary hover:underline">
+                    Forgot password?
+                  </Link>
+                </div>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input

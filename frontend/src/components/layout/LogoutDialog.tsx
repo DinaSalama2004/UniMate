@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { LogOut } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/context/AuthContext";
 
 interface LogoutDialogProps {
   showText?: boolean;
@@ -19,9 +20,10 @@ interface LogoutDialogProps {
 
 export function LogoutDialog({ showText = false }: LogoutDialogProps) {
   const navigate = useNavigate();
+  const { logout } = useAuth();
 
   const handleLogout = () => {
-    // In a real app, this would clear auth state/tokens
+    logout();
     navigate("/login");
   };
 

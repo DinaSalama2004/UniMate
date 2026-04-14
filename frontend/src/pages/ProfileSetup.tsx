@@ -26,7 +26,10 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useProfile } from "@/context/ProfileContext";
+import { useAuth } from "@/context/AuthContext";
 import { Course } from "@/types";
+import { fetchAPI, extractErrorMessage } from "@/lib/api";
+import { toast } from "sonner";
 
 const universities = [
   "Cairo University",
@@ -82,6 +85,7 @@ UniMate will automatically extract your courses and grades.`
 export default function ProfileSetup() {
   const navigate = useNavigate();
   const { profile, updateProfile, setCurrentStep, currentStep, setHasCompletedSetup } = useProfile();
+  const { login } = useAuth();
   const [step, setStep] = useState(1);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStep, setProcessingStep] = useState(0);
@@ -201,7 +205,7 @@ export default function ProfileSetup() {
     }, 800);
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (step === 3 && gradesText) {
       simulateGradeExtraction();
       return;
@@ -213,9 +217,31 @@ export default function ProfileSetup() {
           setPasswordError("Passwords do not match");
           return;
         }
-        if (localProfile.password.length < 6) {
-          setPasswordError("Password must be at least 6 characters");
+        if (localProfile.password.length < 8) {
+          setPasswordError("Password must be at least 8 characters");
           return;
+        }
+
+        try {
+          setIsProcessing(true);
+          const data = await fetchAPI("/register", {
+            method: "POST",
+            body: JSON.stringify({
+              full_name: localProfile.name,
+              email: localProfile.email,
+              password: localProfile.password,
+              confirm_password: localProfile.confirmPassword,
+            }),
+          });
+          login(data.token, data.role);
+          toast.success("Account created successfully!");
+        } catch (err) {
+          const msg = extractErrorMessage(err);
+          // Just show the toast and prevent moving to step 2
+          toast.error(msg);
+          return;
+        } finally {
+          setIsProcessing(false);
         }
       }
       setStep(step + 1);

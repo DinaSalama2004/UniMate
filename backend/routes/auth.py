@@ -1,15 +1,25 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 from sqlalchemy.orm import Session
+from datetime import datetime, timedelta
+from jose import jwt, JWTError
 
 from database import get_db
 from models.student import Student
 from models.user import User
 from utils.jwt import create_token
-from utils.security import hash_password, super_admin_required, verify_password
+from utils.security import hash_password, super_admin_required, verify_password, SECRET_KEY, ALGORITHM
 
 router = APIRouter()
 
+
+class PostForgotPasswordBody(BaseModel):
+    email: EmailStr
+
+class PostResetPasswordBody(BaseModel):
+    email: EmailStr
+    reset_token: str
+    new_password: str = Field(..., min_length=8, max_length=128)
 
 class EmailPasswordBody(BaseModel):
     email: EmailStr
@@ -112,6 +122,49 @@ def login(body: EmailPasswordBody, db: Session = Depends(get_db)):
     
     return {"token": token, "role": user.role}
 
+# FORGOT PASSWORD
+@router.post("/forgot-password")
+def forgot_password(body: PostForgotPasswordBody, db: Session = Depends(get_db)):
+    email = body.email.strip().lower()
+    user = db.query(User).filter(User.email == email).first()
+    
+    if not user:
+        # In a real app we might not want to return 404 to prevent email enumeration, 
+        # but returning it here for UX clarity.
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "user_not_found", "message": "User not found."}
+        )
+        
+    payload = {
+        "sub": user.email,
+        "purpose": "password_reset",
+        "exp": datetime.utcnow() + timedelta(minutes=15)
+    }
+    reset_token = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+    
+    return {"message": "Reset link would be sent via email in production", "reset_token": reset_token}
+
+# RESET PASSWORD
+@router.post("/reset-password")
+def reset_password(body: PostResetPasswordBody, db: Session = Depends(get_db)):
+    email = body.email.strip().lower()
+    
+    try:
+        payload = jwt.decode(body.reset_token, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("sub") != email or payload.get("purpose") != "password_reset":
+            raise HTTPException(status_code=401, detail="Invalid token")
+    except JWTError:
+        raise HTTPException(status_code=401, detail={"code": "invalid_token", "message": "The reset token is invalid or expired."})
+        
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    user.password = hash_password(body.new_password)
+    db.commit()
+    return {"message": "Password updated successfully."}
+
 
 # SUPER ADMIN CREATES ADMIN
 @router.post("/create-admin")
@@ -150,13 +203,14 @@ def create_admin(
 
 
 # SUPER ADMIN DELETES ADMIN
-@router.delete("/admin/{admin_id}")
+@router.delete("/admin/{admin_email}")
 def delete_admin(
-    admin_id: str,
+    admin_email: str,
     db: Session = Depends(get_db),
     _: User = Depends(super_admin_required),
 ):
-    admin = db.query(User).filter(User.id == admin_id, User.role == "admin").first()
+    email = admin_email.strip().lower()
+    admin = db.query(User).filter(User.email == email, User.role == "admin").first()
     if not admin:
         raise HTTPException(
             status_code=404,
@@ -167,7 +221,7 @@ def delete_admin(
         )
     
     from models.admin import Admin
-    admin_record = db.query(Admin).filter(Admin.user_id == admin_id).first()
+    admin_record = db.query(Admin).filter(Admin.user_id == admin.id).first()
     if admin_record:
         db.delete(admin_record)
 
