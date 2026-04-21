@@ -3,15 +3,18 @@ from pydantic import BaseModel, EmailStr, Field, field_validator, model_validato
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from jose import jwt, JWTError
-
 from database import get_db
 from models.student import Student
 from models.user import User
 from utils.jwt import create_token
-from utils.security import hash_password, super_admin_required, verify_password, SECRET_KEY, ALGORITHM
+from utils.security import hash_password, verify_password, SECRET_KEY, ALGORITHM
+from models.student import Student
+from jose import jwt, JWTError
+from fastapi import Depends, HTTPException
+from jose import jwt, JWTError
+from utils.security import SECRET_KEY, ALGORITHM
 
 router = APIRouter()
-
 
 class PostForgotPasswordBody(BaseModel):
     email: EmailStr
@@ -31,7 +34,6 @@ class EmailPasswordBody(BaseModel):
         if not v:
             raise ValueError("Password is required.")
         return v
-
 
 class RegisterBody(BaseModel):
     full_name: str = Field(..., max_length=255)
@@ -59,44 +61,51 @@ class RegisterBody(BaseModel):
         if self.password != self.confirm_password:
             raise ValueError("Password and confirm password do not match.")
         return self
-
-
+    
 # SIGN UP STUDENT
 @router.post("/register")
 def register(body: RegisterBody, db: Session = Depends(get_db)):
-    email = str(body.email).strip().lower()
+    email = body.email.strip().lower()
 
-    if db.query(User).filter(User.email == email).first():
+    existing = db.query(User).filter(User.email == email).first()
+    if existing:
         raise HTTPException(
             status_code=400,
-            detail={
-                "code": "email_exists",
-                "message": "This email is already registered.",
-            },
+            detail={"code": "email_exists", "message": "Email already registered"}
         )
 
     user = User(
         full_name=body.full_name,
         email=email,
         password=hash_password(body.password),
-        role="student",
+        role="student"
     )
 
     db.add(user)
     db.commit()
     db.refresh(user)
 
-    student = Student(user_id=user.id)
+    student = Student(
+        user_id=user.id,
+        academic_year=None,
+        gpa=None,
+        profile_completion_percentage=10
+    )
+
     db.add(student)
     db.commit()
 
     token = create_token({
         "sub": user.email,
         "user_id": user.id,
-        "role": user.role,
+        "role": user.role
     })
-    return {"token": token, "role": user.role}
 
+    return {
+        "token": token,
+        "role": user.role,
+        "user_id": user.id
+    }
 
 # LOGIN STUDENT, ADMIN
 @router.post("/login")
@@ -165,66 +174,3 @@ def reset_password(body: PostResetPasswordBody, db: Session = Depends(get_db)):
     db.commit()
     return {"message": "Password updated successfully."}
 
-
-# SUPER ADMIN CREATES ADMIN
-@router.post("/create-admin")
-def create_admin(
-    body: EmailPasswordBody,
-    db: Session = Depends(get_db),
-    _: User = Depends(super_admin_required),
-):
-    email = body.email.strip().lower()
-    # Check if email already exists
-    if db.query(User).filter(User.email == email).first():
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "code": "email_exists",
-                "message": "This email is already registered.",
-            },
-        )
-
-    # Create admin user
-    admin = User(
-        email=email,
-        password=hash_password(body.password),
-        role="admin"
-    )
-    db.add(admin)
-    db.commit()
-    db.refresh(admin)
-
-    from models.admin import Admin
-    admin_record = Admin(user_id=admin.id)
-    db.add(admin_record)
-    db.commit()
-
-    return {"message": f"Admin {email} created successfully"}
-
-
-# SUPER ADMIN DELETES ADMIN
-@router.delete("/admin/{admin_email}")
-def delete_admin(
-    admin_email: str,
-    db: Session = Depends(get_db),
-    _: User = Depends(super_admin_required),
-):
-    email = admin_email.strip().lower()
-    admin = db.query(User).filter(User.email == email, User.role == "admin").first()
-    if not admin:
-        raise HTTPException(
-            status_code=404,
-            detail={
-                "code": "admin_not_found",
-                "message": "Admin not found.",
-            },
-        )
-    
-    from models.admin import Admin
-    admin_record = db.query(Admin).filter(Admin.user_id == admin.id).first()
-    if admin_record:
-        db.delete(admin_record)
-
-    db.delete(admin)
-    db.commit()
-    return {"message": f"Admin deleted successfully"}

@@ -45,3 +45,21 @@ def super_admin_required(current_user: User = Depends(get_current_user)):
     if current_user.email != SUPER_ADMIN_EMAIL and getattr(current_user, "role", "") != "super_admin":
         raise HTTPException(status_code=403, detail="Only super admin can perform this action")
     return current_user
+
+def admin_required(current_user: User = Depends(get_current_user)):
+    if getattr(current_user, "role", "") not in ["admin", "super_admin"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only admin or super admin can perform this action"
+        )
+    return current_user
+
+def require_roles(*roles):
+    def checker(current_user: User = Depends(get_current_user)):
+        if current_user.role not in roles:
+            raise HTTPException(
+                status_code=403,
+                detail="Not enough permissions"
+            )
+        return current_user
+    return checker
