@@ -11,10 +11,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
 import { useNavigate, useParams } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { mockAdminAnnouncements } from "@/data/adminMockData";
 import { useToast } from "@/hooks/use-toast";
+
+import {
+  getAnnouncementById,
+  createAnnouncement,
+  updateAnnouncement,
+} from "@/api/announcementApi";
+
+import { AnnouncementStatus } from "@/types/announcement";
+import { extractErrorMessage } from "@/lib/api";
 
 const categories = [
   { value: "event", label: "Event" },
@@ -26,79 +35,117 @@ const categories = [
 
 export default function AdminAnnouncementForm() {
   const navigate = useNavigate();
-  const { id } = useParams();
+  const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
-  const isEdit = !!id;
 
-  const [title, setTitle] = useState("");
-  const [category, setCategory] = useState("");
-  const [content, setContent] = useState("");
+  const isEdit = Boolean(id);
 
+  const [title, setTitle] = useState<string>("");
+  const [category, setCategory] = useState<string>("");
+  const [content, setContent] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(false);
+
+  // ✅ FETCH IF EDIT
   useEffect(() => {
-    if (isEdit) {
-      const existing = mockAdminAnnouncements.find((a) => a.id === id);
-      if (existing) {
-        setTitle(existing.title);
-        setCategory(existing.category);
-        setContent(existing.content);
-      }
-    }
-  }, [id, isEdit]);
+    if (!id) return;
 
-  const handleSubmit = (status: "published" | "draft") => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+
+        const data = await getAnnouncementById(id);
+
+        setTitle(data.title);
+        setCategory(data.category);
+        setContent(data.content);
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: extractErrorMessage(error),
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [id]);
+
+  // ✅ SUBMIT
+  const handleSubmit = async (status: AnnouncementStatus) => {
     if (!title.trim() || !category || !content.trim()) {
       toast({
         title: "Missing fields",
-        description: "Please fill in all required fields.",
+        description: "Please fill all fields",
         variant: "destructive",
       });
       return;
     }
 
-    toast({
-      title: status === "published" ? "Announcement Published" : "Draft Saved",
-      description:
-        status === "published"
-          ? "The announcement is now visible to students."
-          : "Your draft has been saved.",
-    });
-    navigate("/admin/announcements");
+    try {
+      setLoading(true);
+
+      const payload = {
+        title,
+        content,
+        category,
+        status,
+      };
+
+      if (isEdit && id) {
+        await updateAnnouncement(id, payload);
+      } else {
+        await createAnnouncement(payload);
+      }
+
+      toast({
+        title:
+          status === "published"
+            ? "Announcement Published"
+            : "Draft Saved",
+      });
+
+      navigate("/admin/announcements");
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: extractErrorMessage(error),
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <AdminLayout>
       <div className="max-w-2xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">
-            {isEdit ? "Edit Announcement" : "New Announcement"}
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            {isEdit
-              ? "Update the announcement details below."
-              : "Fill in the details to create a new announcement."}
-          </p>
-        </div>
+        <h1 className="text-3xl font-bold">
+          {isEdit ? "Edit Announcement" : "New Announcement"}
+        </h1>
 
         <Card>
           <CardHeader>
             <CardTitle>Announcement Details</CardTitle>
           </CardHeader>
+
           <CardContent className="space-y-5">
+            {/* TITLE */}
             <div className="space-y-2">
-              <Label htmlFor="title">Title</Label>
+              <Label>Title</Label>
               <Input
-                id="title"
-                placeholder="Enter announcement title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
               />
             </div>
 
+            {/* CATEGORY */}
             <div className="space-y-2">
-              <Label htmlFor="category">Category</Label>
+              <Label>Category</Label>
               <Select value={category} onValueChange={setCategory}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select a category" />
+                  <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
                   {categories.map((cat) => (
@@ -110,24 +157,33 @@ export default function AdminAnnouncementForm() {
               </Select>
             </div>
 
+            {/* CONTENT */}
             <div className="space-y-2">
-              <Label htmlFor="content">Content</Label>
+              <Label>Content</Label>
               <Textarea
-                id="content"
-                placeholder="Write the announcement content..."
                 rows={6}
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
               />
             </div>
 
-            <div className="flex gap-3 pt-2">
-              <Button onClick={() => handleSubmit("published")}>
-                Publish Announcement
+            {/* BUTTONS */}
+            <div className="flex gap-3">
+              <Button
+                onClick={() => handleSubmit("published")}
+                disabled={loading}
+              >
+                Publish
               </Button>
-              <Button variant="outline" onClick={() => handleSubmit("draft")}>
+
+              <Button
+                variant="outline"
+                onClick={() => handleSubmit("draft")}
+                disabled={loading}
+              >
                 Save Draft
               </Button>
+
               <Button
                 variant="ghost"
                 onClick={() => navigate("/admin/announcements")}

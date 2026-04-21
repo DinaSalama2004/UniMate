@@ -67,7 +67,7 @@ export interface ProfileData {
   university: string;
   college: string;
   academicYear: string;
-  interests: string[];
+  interests: number[];
   courses: Course[];
   gpa?: number;
   careerPreferences?: string[];

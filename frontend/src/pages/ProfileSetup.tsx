@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -100,8 +100,8 @@ export default function ProfileSetup() {
     university: "",
     college: "",
     academicYear: "",
-    major: "",
-    interests: [] as string[],
+    major: null as number | null,
+    interests: [] as number[],
   });
 
   const majors = [
@@ -123,7 +123,7 @@ export default function ProfileSetup() {
     "Analyzing your academic profile...",
   ];
 
-  const handleInterestToggle = (interestId: string) => {
+  const handleInterestToggle = (interestId: number) => {
     setLocalProfile((prev) => ({
       ...prev,
       interests: prev.interests.includes(interestId)
@@ -131,6 +131,8 @@ export default function ProfileSetup() {
         : [...prev.interests, interestId],
     }));
   };
+
+
 
   const handleInputChange = (field: string, value: string) => {
     setLocalProfile((prev) => ({ ...prev, [field]: value }));
@@ -205,13 +207,31 @@ export default function ProfileSetup() {
     }, 800);
   };
 
+  const [majorsList, setMajorsList] = useState([]);
+  const [interestsList, setInterestsList] = useState([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const majors = await fetchAPI("/academic/majors");
+        const interests = await fetchAPI("/academic/interests");
+
+        setMajorsList(majors);
+        setInterestsList(interests);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+
   const handleNext = async () => {
-    if (step === 3 && gradesText) {
-      simulateGradeExtraction();
-      return;
-    }
-    if (step < totalSteps) {
-      // Validate passwords if on step 1
+    try {
+      setIsProcessing(true);
+      console.log("HANDLE NEXT:", step);
+      // STEP 1: Register
       if (step === 1) {
         if (localProfile.password !== localProfile.confirmPassword) {
           setPasswordError("Passwords do not match");
@@ -221,33 +241,72 @@ export default function ProfileSetup() {
           setPasswordError("Password must be at least 8 characters");
           return;
         }
+        await fetchAPI("/register", {
+          method: "POST",
+          body: JSON.stringify({
+            full_name: localProfile.name,
+            email: localProfile.email,
+            password: localProfile.password,
+            confirm_password: localProfile.confirmPassword,
+          }),
+        });
 
-        try {
-          setIsProcessing(true);
-          const data = await fetchAPI("/register", {
-            method: "POST",
-            body: JSON.stringify({
-              full_name: localProfile.name,
-              email: localProfile.email,
-              password: localProfile.password,
-              confirm_password: localProfile.confirmPassword,
-            }),
-          });
-          login(data.token, data.role);
-          toast.success("Account created successfully!");
-        } catch (err) {
-          const msg = extractErrorMessage(err);
-          // Just show the toast and prevent moving to step 2
-          toast.error(msg);
+        toast.success("Account created successfully!");
+      }
+
+      // STEP 2: Basic info + Interests
+      if (step === 2) {
+        console.log("Updating basic data + interests...");
+
+        const mapYear = (year: string) => {
+          switch (year) {
+            case "First": return 1;
+            case "Second": return 2;
+            case "Third": return 3;
+            case "Fourth": return 4;
+            default: return 1;
+          }
+        };
+      
+        // 1) update basic data
+        await fetchAPI("/student/updateBasicData", {
+          method: "PUT",
+          body: JSON.stringify({
+            university: localProfile.university,
+            college: localProfile.college,
+            academic_year: mapYear(localProfile.academicYear),
+            major_id: Number(localProfile.major),
+          }),
+        });
+
+        // 2) update interests
+        await fetchAPI("/student/updateInterests", {
+          method: "PUT",
+          body: JSON.stringify({
+            interests: localProfile.interests, // array of IDs
+          }),
+        });
+
+        toast.success("Profile updated successfully!");
+      }
+
+      // STEP 3: GRADES
+      if (step === 3) {
+        if (!extractedCourses.length) {
+          simulateGradeExtraction();
           return;
-        } finally {
-          setIsProcessing(false);
         }
       }
-      setStep(step + 1);
+
+      // go next step
+      setStep((prev) => prev + 1);
+    } catch (err) {
+      console.error(err);
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setIsProcessing(false);
     }
   };
-
   const handleBack = () => {
     if (step > 1) {
       setStep(step - 1);
@@ -490,18 +549,21 @@ export default function ProfileSetup() {
                           Major
                         </label>
                         <Select
-                          value={localProfile.major}
+                          value={String(localProfile.major)}
                           onValueChange={(value) =>
-                            setLocalProfile((prev) => ({ ...prev, major: value }))
+                            setLocalProfile((prev) => ({
+                              ...prev,
+                              major: Number(value),
+                            }))
                           }
                         >
                           <SelectTrigger>
                             <SelectValue placeholder="Select your major" />
                           </SelectTrigger>
                           <SelectContent>
-                            {majors.map((major) => (
-                              <SelectItem key={major} value={major}>
-                                {major}
+                            {majorsList.map((major: any) => (
+                              <SelectItem key={major.id} value={String(major.id)}>
+                                {major.name}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -529,20 +591,19 @@ export default function ProfileSetup() {
                     <div>
                       <label className="text-sm font-medium text-foreground mb-3 block">Interests (select all that apply)</label>
                       <div className="grid grid-cols-2 gap-3">
-                        {interests.map((interest) => (
+                        {interestsList.map((interest: any) => (
                           <div
                             key={interest.id}
-                            className={`flex items-center gap-3 p-3 rounded-lg border transition-all cursor-pointer ${localProfile.interests.includes(interest.id)
+                            className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer ${localProfile.interests.includes(interest.id)
                               ? "border-primary bg-primary-light"
-                              : "border-border hover:border-primary/30"
+                              : "border-border"
                               }`}
                             onClick={() => handleInterestToggle(interest.id)}
                           >
                             <Checkbox
                               checked={localProfile.interests.includes(interest.id)}
-                              onCheckedChange={() => handleInterestToggle(interest.id)}
                             />
-                            <span className="text-sm font-medium">{interest.label}</span>
+                            <span className="text-sm font-medium">{interest.name}</span>
                           </div>
                         ))}
                       </div>
@@ -739,22 +800,10 @@ export default function ProfileSetup() {
               </Button>
               <Button
                 variant="default"
-                onClick={() => {
-                  if (step === 3 && !extractedCourses.length) {
-                    handleNext();
-                  } else {
-                    setStep(step + 1);
-                  }
-                }}
+                onClick={handleNext}
                 disabled={!canProceed() || isProcessing}
-                className="gap-2"
               >
-                {step === 3 && !extractedCourses.length ? "Analyze Grades" : "Continue"}
-                {isProcessing ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <ArrowRight className="w-4 h-4" />
-                )}
+                Continue
               </Button>
             </div>
           )}
